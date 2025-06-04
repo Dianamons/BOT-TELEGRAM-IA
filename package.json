@@ -1,21 +1,10 @@
 {
   "name": "telegram-gemini-bot",
   "version": "1.0.0",
-  "description": "Telegram bot AI berbasis Google Gemini (Node.js + Telegraf)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
-  "keywords": [
-    "telegram",
-    "bot",
-    "gemini",
-    "telegraf",
-    "google",
-    "ai"
-  ],
-  "author": "Nama Kamu",
-  "license": "MIT",
   "dependencies": {
     "@google/generative-ai": "^0.6.0",
     "dotenv": "^16.0.3",
