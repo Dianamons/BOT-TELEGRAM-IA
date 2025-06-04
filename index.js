@@ -67,8 +67,8 @@ bot.action('riwayat_chat', (ctx) => {
   }
 });
 
-// Simpan API Key (cek format sk-xxx)
-bot.hears(/^sk-[a-zA-Z0-9]{20,}/, (ctx) => {
+// Simpan API Key (cek format sk-xxx, support semua variasi, contoh: sk-proj-..., sk-live-...)
+bot.hears(/^sk-[\w-]{20,}/, (ctx) => {
   userKeys.set(ctx.from.id, ctx.message.text.trim());
   ctx.reply('API Key kamu sudah disimpan! Sekarang kamu bisa mulai bertanya ke AI.');
 });
