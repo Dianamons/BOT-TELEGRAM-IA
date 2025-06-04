@@ -1,6 +1,6 @@
 require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
-const { Configuration, OpenAIApi } = require('openai');
+const { OpenAI } = require('openai');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
@@ -96,15 +96,14 @@ bot.on('text', async (ctx) => {
 
   // Kirim ke OpenAI
   try {
-    const configuration = new Configuration({ apiKey });
-    const openai = new OpenAIApi(configuration);
+    const openai = new OpenAI({ apiKey });
 
-    const res = await openai.createChatCompletion({
+    const res = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [{ role: 'user', content: ctx.message.text }]
     });
 
-    const answer = res.data.choices[0].message.content.trim();
+    const answer = res.choices[0].message.content.trim();
 
     ctx.replyWithMarkdownV2(
       '```\n' + escapeMarkdown(answer) + '\n```'
