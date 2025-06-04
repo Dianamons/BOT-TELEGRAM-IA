@@ -2,13 +2,15 @@ require('dotenv').config();
 const { Telegraf, Markup } = require('telegraf');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
+// Inisialisasi bot Telegram
 const BOT_TOKEN = process.env.BOT_TOKEN;
-
+if (!BOT_TOKEN) {
+    throw new Error('BOT_TOKEN tidak ditemukan di .env atau variable Railway!');
+}
 const bot = new Telegraf(BOT_TOKEN);
 
-// Simpan API key user (pakai Map, bisa diganti database)
+// Penyimpanan API key user & riwayat chat (RAM, bisa ganti ke DB)
 const userKeys = new Map();
-// Simpan riwayat chat user (dummy, 5 pesan terakhir per user)
 const userChats = new Map();
 
 const mainMenu = Markup.inlineKeyboard([
@@ -22,7 +24,7 @@ const mainMenu = Markup.inlineKeyboard([
   ]
 ]);
 
-// Welcome dan menu utama
+// /start dan menu utama
 bot.start((ctx) => {
   ctx.reply(
     `👋 *Selamat datang di Gemini Bot!*\n\n` +
@@ -67,7 +69,7 @@ bot.action('riwayat_chat', (ctx) => {
   }
 });
 
-// Simpan API Key Gemini (format AI... dengan minimal 30 char, bisa disesuaikan)
+// Simpan API Key Gemini (deteksi AI... min 30 char)
 bot.hears(/^AI[\w-]{30,}/, (ctx) => {
   userKeys.set(ctx.from.id, ctx.message.text.trim());
   ctx.reply('API Key Gemini kamu sudah disimpan! Sekarang kamu bisa mulai bertanya ke AI.');
@@ -87,27 +89,27 @@ bot.on('text', async (ctx) => {
     return;
   }
 
-  // Simpan chat user (riwayat)
+  // Simpan chat user (riwayat 5 terakhir)
   const chatHist = userChats.get(ctx.from.id) || [];
   if (chatHist.length >= 5) chatHist.shift();
   chatHist.push(ctx.message.text);
   userChats.set(ctx.from.id, chatHist);
 
-  // Kirim ke Gemini
+  // Kirim ke Gemini (pakai model chat-bison-001)
   try {
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "models/chat-bison-001" });
     const result = await model.generateContent(ctx.message.text);
-    const answer = result?.response?.text()?.trim();
+    const answer = result?.response?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
 
     if (answer) {
       ctx.reply(answer);
     } else {
-      ctx.reply('❌ Gagal mendapatkan jawaban dari Gemini. Coba lagi atau cek API Key kamu.');
+      ctx.reply('❌ Gagal mendapatkan jawaban dari Gemini. Jawaban kosong atau format tidak dikenali.');
     }
   } catch (e) {
     ctx.reply(
-      `❌ Gagal mendapatkan jawaban dari Gemini.\n*Error:* ${e.message}\n\nSilakan cek API Key atau limit akun kamu.`,
+      `❌ Gagal mendapatkan jawaban dari Gemini.\nError: ${e.message}\n\nSilakan cek API Key atau limit akun kamu.`,
       { parse_mode: 'Markdown' }
     );
   }
@@ -116,5 +118,6 @@ bot.on('text', async (ctx) => {
 // Jalankan bot
 bot.launch();
 
+// Graceful shutdown
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
