@@ -4,12 +4,15 @@ const axios = require('axios');
 const fs = require('fs');
 
 const BOT_TOKEN = process.env.BOT_TOKEN;
-const URL = process.env.WEBHOOK_URL || 'https://your-railway-app.up.railway.app'; // ganti dengan URL Railway kamu
+const DOMAIN = process.env.WEBHOOK_URL
+  ? process.env.WEBHOOK_URL.replace(/^https?:\/\//, '')
+  : 'bot-telegram-ia-production.up.railway.app';
+const PORT = process.env.PORT || 3000;
 
 const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 
-// STEP 1: Login
+// ========== HANDLER LOGIN DAN MENU ==========
 bot.start((ctx) => {
   ctx.session = {};
   ctx.reply('👋 Selamat datang! Silakan login dengan mengirim API Token Cloudflare Anda:');
@@ -19,18 +22,21 @@ bot.start((ctx) => {
 bot.on('text', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const { state } = ctx.session;
+
   if (state === 'awaiting_token') {
     ctx.session.apiToken = ctx.message.text.trim();
     ctx.session.state = 'awaiting_account_id';
     ctx.reply('Masukkan Account ID Cloudflare Anda:');
     return;
   }
+
   if (state === 'awaiting_account_id') {
     ctx.session.accountId = ctx.message.text.trim();
     ctx.session.state = 'awaiting_zone_id';
     ctx.reply('Masukkan Zone ID Cloudflare Anda:');
     return;
   }
+
   if (state === 'awaiting_zone_id') {
     ctx.session.zoneId = ctx.message.text.trim();
     ctx.session.state = null;
@@ -39,12 +45,14 @@ bot.on('text', async (ctx) => {
     ]).resize());
     return;
   }
+
   if (state === 'awaiting_worker_name') {
     ctx.session.workerName = ctx.message.text.trim();
     ctx.session.state = 'awaiting_domain';
     ctx.reply('Masukkan nama domain (contoh: domain.com):');
     return;
   }
+
   if (state === 'awaiting_domain') {
     ctx.session.domain = ctx.message.text.trim();
     let workerCode;
@@ -80,6 +88,7 @@ bot.on('text', async (ctx) => {
     }
     return;
   }
+
   if (state === 'awaiting_wildcard') {
     const pattern = ctx.message.text.trim();
     ctx.reply('⏳ Menambahkan wildcard route...');
@@ -106,12 +115,13 @@ bot.on('text', async (ctx) => {
   }
 });
 
-// Menu utama & tombol
+// ========== MENU WORKER DAN WILDCARD ==========
 bot.hears('Buat Worker', (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.session.state = 'awaiting_worker_name';
   ctx.reply('Masukkan nama worker yang ingin dibuat:');
 });
+
 bot.hears('Daftar Worker', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar worker...');
@@ -127,6 +137,7 @@ bot.hears('Daftar Worker', async (ctx) => {
     ctx.reply('❌ Gagal mengambil daftar worker');
   }
 });
+
 bot.hears('Hapus Worker', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar worker...');
@@ -143,6 +154,7 @@ bot.hears('Hapus Worker', async (ctx) => {
     ctx.reply('❌ Gagal mengambil daftar worker');
   }
 });
+
 bot.action(/^delworker_(.+)$/, async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const workerId = ctx.match[1];
@@ -157,12 +169,12 @@ bot.action(/^delworker_(.+)$/, async (ctx) => {
   }
 });
 
-// Wildcard menu
 bot.hears('Tambah Wildcard', (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.session.state = 'awaiting_wildcard';
   ctx.reply('Masukkan wildcard route (contoh: sub.domain.com/*):');
 });
+
 bot.hears('List Wildcard', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar wildcard...');
@@ -178,6 +190,7 @@ bot.hears('List Wildcard', async (ctx) => {
     ctx.reply('❌ Gagal mengambil daftar wildcard.');
   }
 });
+
 bot.hears('Hapus Wildcard', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar wildcard...');
@@ -194,6 +207,7 @@ bot.hears('Hapus Wildcard', async (ctx) => {
     ctx.reply('❌ Gagal mengambil daftar wildcard.');
   }
 });
+
 bot.action(/^delroute_(.+)$/, async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const routeId = ctx.match[1];
@@ -208,7 +222,7 @@ bot.action(/^delroute_(.+)$/, async (ctx) => {
   }
 });
 
-// Menu utama
+// ========== MENU UTAMA ==========
 bot.hears('Menu Utama', (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.reply('Menu:', Markup.keyboard([
@@ -216,23 +230,18 @@ bot.hears('Menu Utama', (ctx) => {
   ]).resize());
 });
 
-// Error handling global
+// ========== ERROR HANDLING ==========
 bot.catch((err, ctx) => {
   console.error('Bot error', err);
   ctx.reply('⚠️ Terjadi error pada bot.');
 });
 
-// === SETUP WEBHOOK ===
-const PORT = process.env.PORT || 3000;
-
+// ========== LAUNCH WEBHOOK ==========
 bot.launch({
   webhook: {
-    domain: URL.replace(/^https?:\/\//, ''), // tanpa http/https
+    domain: DOMAIN,
     port: PORT,
   }
 }).then(() => {
-  console.log(`Bot running on webhook at ${URL}`);
+  console.log(`Bot running on webhook at https://${DOMAIN} (port ${PORT})`);
 });
-
-// Agar Railway tetap hidup (khusus Railway)
-require('http').createServer((req, res) => res.end("Bot running")).listen(PORT);
