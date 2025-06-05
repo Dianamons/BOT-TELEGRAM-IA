@@ -1,3 +1,4 @@
+console.log('Bot.js started');
 const { Telegraf, Markup, session } = require('telegraf');
 require('dotenv').config();
 const axios = require('axios');
