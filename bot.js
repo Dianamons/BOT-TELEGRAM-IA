@@ -15,6 +15,7 @@ bot.use(session());
 // ========== HANDLER LOGIN DAN MENU ==========
 bot.start((ctx) => {
   ctx.session = {};
+  console.log('START: User', ctx.from.id);
   ctx.reply('👋 Selamat datang! Silakan login dengan mengirim API Token Cloudflare Anda:');
   ctx.session.state = 'awaiting_token';
 });
@@ -22,10 +23,12 @@ bot.start((ctx) => {
 bot.on('text', async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const { state } = ctx.session;
+  console.log('ON TEXT:', ctx.from.id, 'STATE:', state);
 
   if (state === 'awaiting_token') {
     ctx.session.apiToken = ctx.message.text.trim();
     ctx.session.state = 'awaiting_account_id';
+    console.log('RECEIVED TOKEN');
     ctx.reply('Masukkan Account ID Cloudflare Anda:');
     return;
   }
@@ -33,6 +36,7 @@ bot.on('text', async (ctx) => {
   if (state === 'awaiting_account_id') {
     ctx.session.accountId = ctx.message.text.trim();
     ctx.session.state = 'awaiting_zone_id';
+    console.log('RECEIVED ACCOUNT ID');
     ctx.reply('Masukkan Zone ID Cloudflare Anda:');
     return;
   }
@@ -40,6 +44,7 @@ bot.on('text', async (ctx) => {
   if (state === 'awaiting_zone_id') {
     ctx.session.zoneId = ctx.message.text.trim();
     ctx.session.state = null;
+    console.log('RECEIVED ZONE ID');
     ctx.reply('✅ Login berhasil!\n\nMenu:', Markup.keyboard([
       ['Buat Worker', 'Daftar Worker', 'Hapus Worker']
     ]).resize());
@@ -49,17 +54,21 @@ bot.on('text', async (ctx) => {
   if (state === 'awaiting_worker_name') {
     ctx.session.workerName = ctx.message.text.trim();
     ctx.session.state = 'awaiting_domain';
+    console.log('RECEIVED WORKER NAME:', ctx.session.workerName);
     ctx.reply('Masukkan nama domain (contoh: domain.com):');
     return;
   }
 
   if (state === 'awaiting_domain') {
     ctx.session.domain = ctx.message.text.trim();
+    console.log('RECEIVED DOMAIN:', ctx.session.domain);
     let workerCode;
     try {
       workerCode = fs.readFileSync('./worker.js', 'utf8');
+      console.log('worker.js found');
     } catch (err) {
       ctx.session.state = null;
+      console.error('worker.js NOT FOUND', err);
       ctx.reply('❌ Gagal membaca file worker.js di server.');
       return;
     }
@@ -78,12 +87,14 @@ bot.on('text', async (ctx) => {
         }
       );
       ctx.session.state = null;
+      console.log('UPLOAD WORKER SUCCESS');
       ctx.reply(`✅ Worker "${ctx.session.workerName}" berhasil dibuat!`, Markup.keyboard([
         ['Tambah Wildcard', 'List Wildcard', 'Hapus Wildcard'],
         ['Menu Utama']
       ]).resize());
     } catch (err) {
       ctx.session.state = null;
+      console.error('UPLOAD WORKER ERROR', err.response?.data || err.message);
       ctx.reply('❌ Gagal upload worker: ' + (err.response?.data?.errors?.[0]?.message || err.message));
     }
     return;
@@ -91,6 +102,7 @@ bot.on('text', async (ctx) => {
 
   if (state === 'awaiting_wildcard') {
     const pattern = ctx.message.text.trim();
+    console.log('ADDING WILDCARD:', pattern);
     ctx.reply('⏳ Menambahkan wildcard route...');
     try {
       await axios.post(
@@ -107,7 +119,9 @@ bot.on('text', async (ctx) => {
         }
       );
       ctx.reply(`✅ Wildcard "${pattern}" berhasil ditambahkan!`);
+      console.log('WILDCARD ADDED');
     } catch (err) {
+      console.error('ADD WILDCARD ERROR', err.response?.data || err.message);
       ctx.reply('❌ Gagal tambah wildcard: ' + (err.response?.data?.errors?.[0]?.message || err.message));
     }
     ctx.session.state = null;
@@ -119,11 +133,13 @@ bot.on('text', async (ctx) => {
 bot.hears('Buat Worker', (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.session.state = 'awaiting_worker_name';
+  console.log('MENU: Buat Worker');
   ctx.reply('Masukkan nama worker yang ingin dibuat:');
 });
 
 bot.hears('Daftar Worker', async (ctx) => {
   if (!ctx.session) ctx.session = {};
+  console.log('MENU: Daftar Worker');
   ctx.reply('⏳ Mengambil daftar worker...');
   try {
     const resp = await axios.get(
@@ -135,11 +151,13 @@ bot.hears('Daftar Worker', async (ctx) => {
     ctx.reply('Daftar Worker:\n' + workers.map(w => '- ' + w.id).join('\n'));
   } catch (err) {
     ctx.reply('❌ Gagal mengambil daftar worker');
+    console.error('LIST WORKERS ERROR', err.response?.data || err.message);
   }
 });
 
 bot.hears('Hapus Worker', async (ctx) => {
   if (!ctx.session) ctx.session = {};
+  console.log('MENU: Hapus Worker');
   ctx.reply('⏳ Mengambil daftar worker...');
   try {
     const resp = await axios.get(
@@ -152,12 +170,14 @@ bot.hears('Hapus Worker', async (ctx) => {
     ctx.reply('Pilih worker yang akan dihapus:', Markup.inlineKeyboard(buttons));
   } catch (err) {
     ctx.reply('❌ Gagal mengambil daftar worker');
+    console.error('LIST WORKERS FOR DELETE ERROR', err.response?.data || err.message);
   }
 });
 
 bot.action(/^delworker_(.+)$/, async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const workerId = ctx.match[1];
+  console.log('DELETE WORKER:', workerId);
   try {
     await axios.delete(
       `https://api.cloudflare.com/client/v4/accounts/${ctx.session.accountId}/workers/scripts/${workerId}`,
@@ -166,17 +186,20 @@ bot.action(/^delworker_(.+)$/, async (ctx) => {
     ctx.reply(`✅ Worker "${workerId}" dihapus!`);
   } catch (err) {
     ctx.reply('❌ Gagal hapus worker.');
+    console.error('DELETE WORKER ERROR', err.response?.data || err.message);
   }
 });
 
 bot.hears('Tambah Wildcard', (ctx) => {
   if (!ctx.session) ctx.session = {};
   ctx.session.state = 'awaiting_wildcard';
+  console.log('MENU: Tambah Wildcard');
   ctx.reply('Masukkan wildcard route (contoh: sub.domain.com/*):');
 });
 
 bot.hears('List Wildcard', async (ctx) => {
   if (!ctx.session) ctx.session = {};
+  console.log('MENU: List Wildcard');
   ctx.reply('⏳ Mengambil daftar wildcard...');
   try {
     const resp = await axios.get(
@@ -188,11 +211,13 @@ bot.hears('List Wildcard', async (ctx) => {
     ctx.reply('Daftar Wildcard:\n' + routes.map(r => '- ' + r.pattern).join('\n'));
   } catch (err) {
     ctx.reply('❌ Gagal mengambil daftar wildcard.');
+    console.error('LIST WILDCARD ERROR', err.response?.data || err.message);
   }
 });
 
 bot.hears('Hapus Wildcard', async (ctx) => {
   if (!ctx.session) ctx.session = {};
+  console.log('MENU: Hapus Wildcard');
   ctx.reply('⏳ Mengambil daftar wildcard...');
   try {
     const resp = await axios.get(
@@ -205,12 +230,14 @@ bot.hears('Hapus Wildcard', async (ctx) => {
     ctx.reply('Pilih wildcard yang akan dihapus:', Markup.inlineKeyboard(buttons));
   } catch (err) {
     ctx.reply('❌ Gagal mengambil daftar wildcard.');
+    console.error('LIST WILDCARD FOR DELETE ERROR', err.response?.data || err.message);
   }
 });
 
 bot.action(/^delroute_(.+)$/, async (ctx) => {
   if (!ctx.session) ctx.session = {};
   const routeId = ctx.match[1];
+  console.log('DELETE WILDCARD ROUTE:', routeId);
   try {
     await axios.delete(
       `https://api.cloudflare.com/client/v4/zones/${ctx.session.zoneId}/workers/routes/${routeId}`,
@@ -219,12 +246,14 @@ bot.action(/^delroute_(.+)$/, async (ctx) => {
     ctx.reply('✅ Wildcard dihapus!');
   } catch (err) {
     ctx.reply('❌ Gagal hapus wildcard.');
+    console.error('DELETE WILDCARD ERROR', err.response?.data || err.message);
   }
 });
 
 // ========== MENU UTAMA ==========
 bot.hears('Menu Utama', (ctx) => {
   if (!ctx.session) ctx.session = {};
+  console.log('MENU: Menu Utama');
   ctx.reply('Menu:', Markup.keyboard([
     ['Buat Worker', 'Daftar Worker', 'Hapus Worker']
   ]).resize());
