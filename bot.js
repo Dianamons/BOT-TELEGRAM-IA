@@ -3,14 +3,15 @@ require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const URL = process.env.WEBHOOK_URL || 'https://your-railway-app.up.railway.app'; // ganti dengan URL Railway kamu
 
-// Gunakan session middleware bawaan Telegraf
+const bot = new Telegraf(BOT_TOKEN);
 bot.use(session());
 
 // STEP 1: Login
 bot.start((ctx) => {
-  ctx.session = {}; // reset session
+  ctx.session = {};
   ctx.reply('👋 Selamat datang! Silakan login dengan mengirim API Token Cloudflare Anda:');
   ctx.session.state = 'awaiting_token';
 });
@@ -38,7 +39,6 @@ bot.on('text', async (ctx) => {
     ]).resize());
     return;
   }
-  // Buat Worker
   if (state === 'awaiting_worker_name') {
     ctx.session.workerName = ctx.message.text.trim();
     ctx.session.state = 'awaiting_domain';
@@ -47,8 +47,16 @@ bot.on('text', async (ctx) => {
   }
   if (state === 'awaiting_domain') {
     ctx.session.domain = ctx.message.text.trim();
-    let workerCode = fs.readFileSync('./worker.js', 'utf8');
+    let workerCode;
+    try {
+      workerCode = fs.readFileSync('./worker.js', 'utf8');
+    } catch (err) {
+      ctx.session.state = null;
+      ctx.reply('❌ Gagal membaca file worker.js di server.');
+      return;
+    }
     workerCode = workerCode.replace(/___DOMAIN___/g, ctx.session.domain);
+
     ctx.reply('⏳ Mengupload worker...');
     try {
       await axios.put(
@@ -72,7 +80,6 @@ bot.on('text', async (ctx) => {
     }
     return;
   }
-  // Tambah Wildcard
   if (state === 'awaiting_wildcard') {
     const pattern = ctx.message.text.trim();
     ctx.reply('⏳ Menambahkan wildcard route...');
@@ -215,5 +222,17 @@ bot.catch((err, ctx) => {
   ctx.reply('⚠️ Terjadi error pada bot.');
 });
 
-// Start bot
-bot.launch();
+// === SETUP WEBHOOK ===
+const PORT = process.env.PORT || 3000;
+
+bot.launch({
+  webhook: {
+    domain: URL.replace(/^https?:\/\//, ''), // tanpa http/https
+    port: PORT,
+  }
+}).then(() => {
+  console.log(`Bot running on webhook at ${URL}`);
+});
+
+// Agar Railway tetap hidup (khusus Railway)
+require('http').createServer((req, res) => res.end("Bot running")).listen(PORT);
