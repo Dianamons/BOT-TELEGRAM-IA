@@ -1,4 +1,4 @@
-const { Telegraf, Markup, session } = require('telegraf');
+const { Telegraf, Markup } = require('telegraf');
 require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
@@ -10,6 +10,7 @@ const bot = new Telegraf(process.env.BOT_TOKEN);
 
 // Middleware session per user
 bot.use((ctx, next) => {
+  if (!ctx.from) return; // Pastikan ctx.from ada (hindari error dari group/channel)
   const userId = ctx.from.id;
   ctx.session = userSessions[userId] = userSessions[userId] || {};
   return next();
@@ -17,12 +18,14 @@ bot.use((ctx, next) => {
 
 // STEP 1: Login
 bot.start((ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.session = {}; // reset session
   ctx.reply('👋 Selamat datang! Silakan login dengan mengirim API Token Cloudflare Anda:');
   ctx.session.state = 'awaiting_token';
 });
 
 bot.on('text', async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   const { state } = ctx.session;
   if (state === 'awaiting_token') {
     ctx.session.apiToken = ctx.message.text.trim();
@@ -109,10 +112,12 @@ bot.on('text', async (ctx) => {
 
 // Menu utama & tombol
 bot.hears('Buat Worker', (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('Masukkan nama worker yang ingin dibuat:');
   ctx.session.state = 'awaiting_worker_name';
 });
 bot.hears('Daftar Worker', async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar worker...');
   try {
     const resp = await axios.get(
@@ -127,6 +132,7 @@ bot.hears('Daftar Worker', async (ctx) => {
   }
 });
 bot.hears('Hapus Worker', async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar worker...');
   try {
     const resp = await axios.get(
@@ -142,6 +148,7 @@ bot.hears('Hapus Worker', async (ctx) => {
   }
 });
 bot.action(/^delworker_(.+)$/, async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   const workerId = ctx.match[1];
   try {
     await axios.delete(
@@ -156,10 +163,12 @@ bot.action(/^delworker_(.+)$/, async (ctx) => {
 
 // Wildcard menu
 bot.hears('Tambah Wildcard', (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('Masukkan wildcard route (contoh: sub.domain.com/*):');
   ctx.session.state = 'awaiting_wildcard';
 });
 bot.hears('List Wildcard', async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar wildcard...');
   try {
     const resp = await axios.get(
@@ -174,6 +183,7 @@ bot.hears('List Wildcard', async (ctx) => {
   }
 });
 bot.hears('Hapus Wildcard', async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('⏳ Mengambil daftar wildcard...');
   try {
     const resp = await axios.get(
@@ -189,6 +199,7 @@ bot.hears('Hapus Wildcard', async (ctx) => {
   }
 });
 bot.action(/^delroute_(.+)$/, async (ctx) => {
+  if (!ctx.session) ctx.session = {};
   const routeId = ctx.match[1];
   try {
     await axios.delete(
@@ -203,9 +214,16 @@ bot.action(/^delroute_(.+)$/, async (ctx) => {
 
 // Menu utama
 bot.hears('Menu Utama', (ctx) => {
+  if (!ctx.session) ctx.session = {};
   ctx.reply('Menu:', Markup.keyboard([
     ['Buat Worker', 'Daftar Worker', 'Hapus Worker']
   ]).resize());
+});
+
+// Error handling global supaya bot tidak crash
+bot.catch((err, ctx) => {
+  console.error('Bot error', err);
+  ctx.reply('⚠️ Terjadi error pada bot.');
 });
 
 // Start bot
