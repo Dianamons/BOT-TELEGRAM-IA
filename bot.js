@@ -1,24 +1,15 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf, Markup, session } = require('telegraf');
 require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
 
-// In-memory session (untuk demo, ganti DB untuk produksi!)
-const userSessions = {};
-
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// Middleware session per user
-bot.use((ctx, next) => {
-  if (!ctx.from) return; // Pastikan ctx.from ada (hindari error dari group/channel)
-  const userId = ctx.from.id;
-  ctx.session = userSessions[userId] = userSessions[userId] || {};
-  return next();
-});
+// Gunakan session middleware bawaan Telegraf
+bot.use(session());
 
 // STEP 1: Login
 bot.start((ctx) => {
-  if (!ctx.session) ctx.session = {};
   ctx.session = {}; // reset session
   ctx.reply('👋 Selamat datang! Silakan login dengan mengirim API Token Cloudflare Anda:');
   ctx.session.state = 'awaiting_token';
@@ -29,14 +20,14 @@ bot.on('text', async (ctx) => {
   const { state } = ctx.session;
   if (state === 'awaiting_token') {
     ctx.session.apiToken = ctx.message.text.trim();
-    ctx.reply('Masukkan Account ID Cloudflare Anda:');
     ctx.session.state = 'awaiting_account_id';
+    ctx.reply('Masukkan Account ID Cloudflare Anda:');
     return;
   }
   if (state === 'awaiting_account_id') {
     ctx.session.accountId = ctx.message.text.trim();
-    ctx.reply('Masukkan Zone ID Cloudflare Anda:');
     ctx.session.state = 'awaiting_zone_id';
+    ctx.reply('Masukkan Zone ID Cloudflare Anda:');
     return;
   }
   if (state === 'awaiting_zone_id') {
@@ -50,16 +41,14 @@ bot.on('text', async (ctx) => {
   // Buat Worker
   if (state === 'awaiting_worker_name') {
     ctx.session.workerName = ctx.message.text.trim();
-    ctx.reply('Masukkan nama domain (contoh: domain.com):');
     ctx.session.state = 'awaiting_domain';
+    ctx.reply('Masukkan nama domain (contoh: domain.com):');
     return;
   }
   if (state === 'awaiting_domain') {
     ctx.session.domain = ctx.message.text.trim();
-    // Replace domain di worker.js template
     let workerCode = fs.readFileSync('./worker.js', 'utf8');
     workerCode = workerCode.replace(/___DOMAIN___/g, ctx.session.domain);
-    // Upload ke Cloudflare
     ctx.reply('⏳ Mengupload worker...');
     try {
       await axios.put(
@@ -72,14 +61,14 @@ bot.on('text', async (ctx) => {
           }
         }
       );
+      ctx.session.state = null;
       ctx.reply(`✅ Worker "${ctx.session.workerName}" berhasil dibuat!`, Markup.keyboard([
         ['Tambah Wildcard', 'List Wildcard', 'Hapus Wildcard'],
         ['Menu Utama']
       ]).resize());
-      ctx.session.state = null;
     } catch (err) {
-      ctx.reply('❌ Gagal upload worker: ' + (err.response?.data?.errors?.[0]?.message || err.message));
       ctx.session.state = null;
+      ctx.reply('❌ Gagal upload worker: ' + (err.response?.data?.errors?.[0]?.message || err.message));
     }
     return;
   }
@@ -113,8 +102,8 @@ bot.on('text', async (ctx) => {
 // Menu utama & tombol
 bot.hears('Buat Worker', (ctx) => {
   if (!ctx.session) ctx.session = {};
-  ctx.reply('Masukkan nama worker yang ingin dibuat:');
   ctx.session.state = 'awaiting_worker_name';
+  ctx.reply('Masukkan nama worker yang ingin dibuat:');
 });
 bot.hears('Daftar Worker', async (ctx) => {
   if (!ctx.session) ctx.session = {};
@@ -164,8 +153,8 @@ bot.action(/^delworker_(.+)$/, async (ctx) => {
 // Wildcard menu
 bot.hears('Tambah Wildcard', (ctx) => {
   if (!ctx.session) ctx.session = {};
-  ctx.reply('Masukkan wildcard route (contoh: sub.domain.com/*):');
   ctx.session.state = 'awaiting_wildcard';
+  ctx.reply('Masukkan wildcard route (contoh: sub.domain.com/*):');
 });
 bot.hears('List Wildcard', async (ctx) => {
   if (!ctx.session) ctx.session = {};
@@ -220,7 +209,7 @@ bot.hears('Menu Utama', (ctx) => {
   ]).resize());
 });
 
-// Error handling global supaya bot tidak crash
+// Error handling global
 bot.catch((err, ctx) => {
   console.error('Bot error', err);
   ctx.reply('⚠️ Terjadi error pada bot.');
