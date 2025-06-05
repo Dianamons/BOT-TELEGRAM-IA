@@ -1,12 +1,13 @@
 {
-  "name": "telegram-gemini-bot",
+  "name": "telegram-huggingface-bot",
   "version": "1.0.0",
+  "description": "Telegram bot AI (Hugging Face Inference API)",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.6.0",
+    "axios": "^1.6.8",
     "dotenv": "^16.0.3",
     "telegraf": "^4.16.2"
   }
