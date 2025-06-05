@@ -1,4 +1,3 @@
-console.log('Bot.js started');
 const { Telegraf, Markup, session } = require('telegraf');
 require('dotenv').config();
 const axios = require('axios');
@@ -234,10 +233,11 @@ bot.hears('Menu Utama', (ctx) => {
 // ========== ERROR HANDLING ==========
 bot.catch((err, ctx) => {
   console.error('Bot error', err);
-  ctx.reply('⚠️ Terjadi error pada bot.');
+  ctx.reply('⚠️ Terjadi error pada bot: ' + err.message);
 });
 
 // ========== LAUNCH WEBHOOK ==========
+console.log('Bot.js started');
 bot.launch({
   webhook: {
     domain: DOMAIN,
