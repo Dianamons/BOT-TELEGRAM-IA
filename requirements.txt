@@ -1,4 +1,3 @@
-v2
-aiogram
+aiogram==2.25.2
 requests
 python-dotenv
