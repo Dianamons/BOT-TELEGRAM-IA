@@ -13,18 +13,18 @@ export default {
         return new Response(
           `Jumlah level subdomain: ${subdomains.length}\nSubdomain: ${subdomains.join(".")}\nArray: ${JSON.stringify(subdomains)}`,
           { headers: { "content-type": "text/plain" } }
-        )
+        );
       } else {
         return new Response(
           "Ini domain utama (tanpa subdomain)",
           { headers: { "content-type": "text/plain" } }
-        )
+        );
       }
     } else {
       return new Response(
         "Domain tidak dikenali",
         { headers: { "content-type": "text/plain" } }
-      )
+      );
     }
   }
 }
