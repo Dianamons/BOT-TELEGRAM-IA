@@ -10,13 +10,8 @@ if (!TELEGRAM_TOKEN) {
 }
 
 const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
-
-// Menyimpan state per user
 const userState = {};
 
-/**
- * Membuat header Cloudflare API
- */
 function cfHeaders(token) {
   return {
     Authorization: `Bearer ${token}`,
@@ -24,47 +19,35 @@ function cfHeaders(token) {
   };
 }
 
-/**
- * Deploy Worker ke Cloudflare
- */
-async function deployWorker(accountId, apiToken, workerName, domain) {
+async function deployWorker(accountId, apiToken, workerName, domain, wildcard) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${workerName}`;
   let code = fs.readFileSync("worker_template.js", "utf8");
-  code = code.replace(/example\.com/g, domain);
+  code = code.replace(/example\.com/g, domain)
+             .replace(/WILDCARD_PLACEHOLDER/g, wildcard);
   return await axios.put(url, code, { headers: cfHeaders(apiToken) });
 }
 
-/**
- * List Worker di Cloudflare
- */
 async function listWorker(accountId, apiToken) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts`;
   return await axios.get(url, { headers: cfHeaders(apiToken) });
 }
 
-/**
- * Hapus Worker Cloudflare
- */
 async function deleteWorker(accountId, apiToken, workerName) {
   const url = `https://api.cloudflare.com/client/v4/accounts/${accountId}/workers/scripts/${workerName}`;
   return await axios.delete(url, { headers: cfHeaders(apiToken) });
 }
 
-// Start command: mulai proses login step by step
 bot.onText(/\/start/, (msg) => {
   userState[msg.from.id] = { step: "awaiting_api_token" };
   bot.sendMessage(msg.chat.id, "Masukkan Cloudflare API Token:");
 });
 
-// Handler semua pesan masuk (flow login dan menu)
 bot.on("message", async (msg) => {
-  // Skip jika command, biar tidak dobel handler (kecuali /start)
   if (msg.text && msg.text.startsWith("/") && msg.text !== "/start") return;
 
   const id = msg.from.id;
-  if (!userState[id]) return; // Harus /start dulu
+  if (!userState[id]) return;
 
-  // Step 1: Input API Token
   if (userState[id].step === "awaiting_api_token") {
     userState[id].apiToken = msg.text.trim();
     userState[id].step = "awaiting_account_id";
@@ -72,7 +55,6 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // Step 2: Input Account ID
   if (userState[id].step === "awaiting_account_id") {
     userState[id].accountId = msg.text.trim();
     userState[id].step = "awaiting_zone_id";
@@ -80,11 +62,9 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // Step 3: Input Zone ID (opsional)
   if (userState[id].step === "awaiting_zone_id") {
     userState[id].zoneId = msg.text.trim() === "-" ? "" : msg.text.trim();
     userState[id].step = "logged_in";
-    // Tampilkan menu utama setelah login selesai
     const opts = {
       reply_markup: {
         keyboard: [
@@ -98,32 +78,47 @@ bot.on("message", async (msg) => {
     return;
   }
 
-  // Setelah login, handle menu
+  // Step by step flow for creating a worker
   if (userState[id].step === "logged_in") {
-    // Buat Worker
+    // Mulai proses pembuatan worker
     if (msg.text === "Buat Worker Wildcard") {
-      bot.sendMessage(
-        msg.chat.id,
-        "Masukkan nama worker dan domain, format: nama_worker|domain.com"
-      );
-      userState[id].menu = "awaiting_worker_data";
+      userState[id].making_worker_step = 1;
+      bot.sendMessage(msg.chat.id, "Masukkan nama worker:");
       return;
     }
 
-    // Proses input worker
-    if (userState[id].menu === "awaiting_worker_data" && msg.text.includes("|")) {
-      const [worker, domain] = msg.text.split("|");
+    // Step 1: Input nama worker
+    if (userState[id].making_worker_step === 1) {
+      userState[id].workerName = msg.text.trim();
+      userState[id].making_worker_step = 2;
+      bot.sendMessage(msg.chat.id, "Masukkan domain (misal: example.com):");
+      return;
+    }
+
+    // Step 2: Input domain
+    if (userState[id].making_worker_step === 2) {
+      userState[id].domain = msg.text.trim();
+      userState[id].making_worker_step = 3;
+      bot.sendMessage(msg.chat.id, "Masukkan wildcard yang akan dipasang (misal: *.example.com):");
+      return;
+    }
+
+    // Step 3: Input wildcard, lalu deploy worker
+    if (userState[id].making_worker_step === 3) {
+      userState[id].wildcard = msg.text.trim();
+      userState[id].making_worker_step = 0; // Reset state
       try {
         const res = await deployWorker(
           userState[id].accountId,
           userState[id].apiToken,
-          worker.trim(),
-          domain.trim()
+          userState[id].workerName,
+          userState[id].domain,
+          userState[id].wildcard
         );
         if (res.data && res.data.success) {
           bot.sendMessage(
             msg.chat.id,
-            `Worker '${worker}' untuk domain '${domain}' berhasil dibuat!`
+            `✅ Worker berhasil dibuat!\n\nNama Worker: ${userState[id].workerName}\nDomain: ${userState[id].domain}\nWildcard: ${userState[id].wildcard}`
           );
         } else {
           bot.sendMessage(msg.chat.id, "Gagal membuat worker:\n" + JSON.stringify(res.data.errors));
@@ -138,7 +133,10 @@ bot.on("message", async (msg) => {
           }`
         );
       }
-      userState[id].menu = undefined;
+      // Hapus data worker agar flow bisa diulang
+      delete userState[id].workerName;
+      delete userState[id].domain;
+      delete userState[id].wildcard;
       return;
     }
 
