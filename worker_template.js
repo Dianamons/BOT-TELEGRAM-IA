@@ -1,64 +1,53 @@
-export default {
-  async fetch(request, env, ctx) {
-    // Bagian ini akan diganti otomatis oleh bot
-    const DOMAIN = "example.com";
-    const WILDCARD = "*.sub.example.com";
+addEventListener("fetch", event => {
+  event.respondWith(handleRequest(event.request));
+});
 
-    // Ambil hostname dari request
-    const url = new URL(request.url);
-    const host = url.hostname;
+async function handleRequest(request) {
+  const DOMAIN = "example.com";
+  const WILDCARD = "*.sub.example.com";
 
-    // Pisahkan host & domain jadi array
-    const hostParts = host.split(".");
-    const domainParts = DOMAIN.split(".");
+  const url = new URL(request.url);
+  const host = url.hostname;
+  const hostParts = host.split(".");
+  const domainParts = DOMAIN.split(".");
 
-    // Cek apakah host diakhiri dengan DOMAIN yang di-set
-    const isMainDomain = hostParts.slice(-domainParts.length).join(".") === DOMAIN;
+  // Cek apakah host diakhiri dengan DOMAIN
+  const isMainDomain = hostParts.slice(-domainParts.length).join(".") === DOMAIN;
 
-    // Ambil pattern wildcard yang di-set, misal: *.sub.example.com
-    // Ubah wildcard menjadi regex, misal: *.sub.example.com -> ^([^.]+)\.sub\.example\.com$
-    function wildcardToRegex(wildcard) {
-      // Escape dot
-      let pattern = wildcard.replace(/\./g, "\\.");
-      // Ganti * dengan grup subdomain
-      pattern = pattern.replace(/\*/g, "([^.]+)");
-      // ^...$ agar match persis
-      return new RegExp("^" + pattern + "$");
-    }
+  function wildcardToRegex(wildcard) {
+    let pattern = wildcard.replace(/\./g, "\\.");
+    pattern = pattern.replace(/\*/g, "([^.]+)");
+    return new RegExp("^" + pattern + "$");
+  }
 
-    const wildcardRegex = wildcardToRegex(WILDCARD);
+  const wildcardRegex = wildcardToRegex(WILDCARD);
+  const isWildcardMatch = wildcardRegex.test(host);
 
-    // Cek apakah host cocok dengan wildcard
-    const isWildcardMatch = wildcardRegex.test(host);
+  let wildcardMatch = null;
+  if (isWildcardMatch) {
+    wildcardMatch = host.match(wildcardRegex).slice(1); // Array subdomain wildcard
+  }
 
-    // Ambil subdomain yang cocok jika wildcard match
-    let wildcardMatch = null;
-    if (isWildcardMatch) {
-      wildcardMatch = host.match(wildcardRegex).slice(1); // Array subdomain wildcard
-    }
-
-    // Output
-    if (isWildcardMatch) {
-      return new Response(
-        `✅ Match wildcard!
+  if (isWildcardMatch) {
+    return new Response(
+      `✅ Match wildcard!
 Wildcard: ${WILDCARD}
 Domain utama: ${DOMAIN}
 Host: ${host}
 Subdomain wildcard: ${JSON.stringify(wildcardMatch)}
 Level subdomain: ${wildcardMatch.length}`,
-        { headers: { "content-type": "text/plain" } }
-      );
-    } else if (isMainDomain) {
-      const subdomains = hostParts.slice(0, -domainParts.length);
-      return new Response(
-        `🌐 Ini domain utama (${DOMAIN})\nSubdomain: ${subdomains.join(".") || "(tidak ada)"}\nArray: ${JSON.stringify(subdomains)}`,
-        { headers: { "content-type": "text/plain" } }
-      );
-    } else {
-      return new Response(
-        `❌ Host tidak cocok wildcard apapun\nHost: ${host}\nWildcard: ${WILDCARD}`,
-        { headers: { "content-type": "text/plain" } }
-      );
-    }
+      { headers: { "content-type": "text/plain" } }
+    );
+  } else if (isMainDomain) {
+    const subdomains = hostParts.slice(0, -domainParts.length);
+    return new Response(
+      `🌐 Ini domain utama (${DOMAIN})\nSubdomain: ${subdomains.join(".") || "(tidak ada)"}\nArray: ${JSON.stringify(subdomains)}`,
+      { headers: { "content-type": "text/plain" } }
+    );
+  } else {
+    return new Response(
+      `❌ Host tidak cocok wildcard apapun\nHost: ${host}\nWildcard: ${WILDCARD}`,
+      { headers: { "content-type": "text/plain" } }
+    );
   }
 }
